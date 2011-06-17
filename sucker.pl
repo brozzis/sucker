@@ -1,6 +1,40 @@
 #!/usr/bin/perl -w
 
 use CGI;
+
+use strict;
+use warnings;
+use WWW::Curl;
+use WWW::Curl::Easy;
+
+sub memo
+{
+    my $curl = WWW::Curl::Easy->new();
+    my $fh   = 'README';
+    if( $curl ){
+        $curl->setopt(CURLOPT_HEADER,1);
+        $curl->setopt(CURLOPT_URL, 
+        'ftp://ftp.perl.org/pub/CPAN/README');
+        my $response_body;
+        
+        open(my $fh, '>', \$response_body);
+        $curl->setopt(CURLOPT_WRITEDATA, $fh);
+        $curl->setopt(CURLOPT_VERBOSE,1);
+        my $retcode = $curl->perform();
+
+        if ($retcode != 0) {
+            warn "An error happened: ", $curl->strerror($retcode), " (
++$retcode)\n";
+            warn "errbuf: ", $curl->errbuf;
+        }
+        $curl->curl_easy_cleanup; 
+    } else {
+        warn " WWW::Curl::Easy->new() failed";
+    }
+}
+
+
+
 $q = CGI->new;                        # create new CGI object
 print $q->header,                    # create the HTTP header
     $q->start_html('hello world'), # start the HTML
@@ -48,8 +82,8 @@ sub getPage {
     ($dir, $img) = @_;
     $url = qq($url/$dir/${img}_L.jpg);
     return curl $url;
-    
 }
+
 if (getPage()) {
     print qq(<img src="$url">);
 } else {
@@ -58,3 +92,4 @@ if (getPage()) {
     if ($lastCmd == "incimg") { inc_dir; } 
     if ($lastCmd == "decimg") { } 
 }
+
