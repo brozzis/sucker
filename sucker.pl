@@ -23,8 +23,7 @@ sub memo
         my $retcode = $curl->perform();
 
         if ($retcode != 0) {
-            warn "An error happened: ", $curl->strerror($retcode), " (
-+$retcode)\n";
+            warn "An error happened: ", $curl->strerror($retcode), " (+$retcode)\n";
             warn "errbuf: ", $curl->errbuf;
         }
         $curl->curl_easy_cleanup; 
@@ -47,6 +46,25 @@ $last_img=249525;
 $dir=$last_dir;
 $img=249525;
     
+
+
+
+sub go_backwards {
+    if (check_couple($c, $i)) 
+    
+}
+
+ 
+sub check_couple {
+    my ($c,$i) = @_;
+
+    if (check_in_db($c,$i)) {
+	return $this::FOUND;
+    } else {
+	check_in_web($c, $i);
+    }
+}
+
  
 sub inc_dir {
     $last_dir = $dir;
@@ -73,15 +91,22 @@ sub dec_img {
 }
 
 
-sub getUrl {
-    # get from db url
-    # $url=...
+
+sub curl {
+    # do something with Curl here
+    # ...
 }
 
-sub getPage {
+sub check_c {
+    my ($dir) = @_;
+    return curl($dir);
+}
+
+
+sub check_in_web {
     ($dir, $img) = @_;
     $url = qq($url/$dir/${img}_L.jpg);
-    return curl $url;
+    return curl($url); # HEAD
 }
 
 if (getPage()) {
