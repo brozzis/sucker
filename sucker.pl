@@ -41,36 +41,18 @@ $last_img=249525;
 $last_dir=3874;
 $last_img=247362; 
 
+$dir_limit=20;
+
+$last_dir=shift || $last_dir;
+$last_img=shift || $last_img;
 
 
 
-
-$dir=$last_dir;
-$img=$last_img;
+# $dir=$last_dir;
+# $img=$last_img;
 
 $base_url=qq(http://sime.photoadmit.com/jpg_L/);
     
-
-sub go_backwards_rec {
-
-    my ($c, $i, $file_not_found)=@_;
-
-    print "$c, $i: $file_not_found\n";
-    if (check_couple($c, $i)) {
-	save_couple($c, $i, 'TRUE');
-	go_backwards($c, --$i, 0);
-    } else {
-	save_couple($c, $i, 'FALSE');
-	$file_not_found++;
-	go_backwards( --$c, $i, $file_not_found );
-	if ($file_not_found>5) {
-	    go_backwards( $c+4, --$i, $file_not_found ); 
-	}
-    }
-    
-    
-    
-}
 
 
 sub go_backwards {
@@ -79,11 +61,14 @@ sub go_backwards {
 
     my $ERR=0;
     my $dir_not_found;
+    my $last_attempt=0;
+
     while(! $ERR) {
-	print "$c, $i: $file_not_found\n";
+	print "\r$c, $i: $file_not_found";
 	if (check_couple($c, $i)) {
 	    save_couple($c, $i, 'TRUE');
 	    --$i; 
+	    $count{$c}++;
 	    $file_not_found=0;
 	    $dir_not_found=0;
 	} else {
@@ -91,13 +76,18 @@ sub go_backwards {
 	    $file_not_found++;
 	    # go_backwards( --$c, $i, $file_not_found );
 	    $c--;
-	    if ($file_not_found>5) {
-		$c+4; 
+	    if ($file_not_found>$dir_limit) {
+		$c+=$dir_limit; 
 		--$i; 
 		$file_not_found = 0;
 		$dir_not_found++;
 		if ($dir_not_found>9) {
-		    $ERR=1;
+		    $last_attempt++;
+		    $c+=4;
+		    $i-=32; # 64 è la media ottenuta da #img / #dir
+		    if ($last_attempt>2) {
+			$ERR=1;
+		    }
 		}
 	    }
 	}
@@ -121,7 +111,7 @@ sub check_in_web {
     my $out=qx(curl  --user-agent "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)"  -s -I ${base_url}/$c/${i}_L.jpg|head -1);
     # print qq(${base_url}/$c/$i_L.jpg);
     $out =~ m#HTTP/1.1\s+(\d+)#;
-    print "$1 ";
+    # print "$1 ";
     return ($1==200);
 }
  
@@ -157,5 +147,12 @@ sub check_c {
 
 
 
+%count = ();
+
+print "\nrunning!\n";
 go_backwards($last_dir, $last_img, 0);
 
+print "\nstop!\n";
+
+foreach $k ( keys %count ) { $tot += $count{$k}; }
+printf "trovati : \n\t %d: collezioni, %d immagini complessive\n", $#count, $tot; 
