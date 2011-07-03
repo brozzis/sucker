@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 
-use CGI;
+# use myconfig;
+#use CGI;
 
-use strict;
-use warnings;
-use WWW::Curl;
-use WWW::Curl::Easy;
+#use strict;use warnings;
+#use WWW::Curl;
+#use WWW::Curl::Easy;
 
 sub memo
 {
@@ -33,63 +33,116 @@ sub memo
 }
 
 
-
-$q = CGI->new;                        # create new CGI object
-print $q->header,                    # create the HTTP header
-    $q->start_html('hello world'), # start the HTML
-    $q->h1('hello world'),         # level 1 header
-    $q->end_html;                  # end the HTML
-
-
+# le più vecchie a giugno 2011
 $last_dir=3895;
 $last_img=249525; 
+
+# le mie foto di panos I
+$last_dir=3874;
+$last_img=247362; 
+
+
+
+
+
 $dir=$last_dir;
-$img=249525;
+$img=$last_img;
+
+$base_url=qq(http://sime.photoadmit.com/jpg_L/);
     
 
+sub go_backwards_rec {
 
+    my ($c, $i, $file_not_found)=@_;
 
-sub go_backwards {
-    if (check_couple($c, $i)) 
+    print "$c, $i: $file_not_found\n";
+    if (check_couple($c, $i)) {
+	save_couple($c, $i, 'TRUE');
+	go_backwards($c, --$i, 0);
+    } else {
+	save_couple($c, $i, 'FALSE');
+	$file_not_found++;
+	go_backwards( --$c, $i, $file_not_found );
+	if ($file_not_found>5) {
+	    go_backwards( $c+4, --$i, $file_not_found ); 
+	}
+    }
+    
+    
     
 }
 
+
+sub go_backwards {
+
+    my ($c, $i, $file_not_found)=@_;
+
+    my $ERR=0;
+    my $dir_not_found;
+    while(! $ERR) {
+	print "$c, $i: $file_not_found\n";
+	if (check_couple($c, $i)) {
+	    save_couple($c, $i, 'TRUE');
+	    --$i; 
+	    $file_not_found=0;
+	    $dir_not_found=0;
+	} else {
+	    save_couple($c, $i, 'FALSE');
+	    $file_not_found++;
+	    # go_backwards( --$c, $i, $file_not_found );
+	    $c--;
+	    if ($file_not_found>5) {
+		$c+4; 
+		--$i; 
+		$file_not_found = 0;
+		$dir_not_found++;
+		if ($dir_not_found>9) {
+		    $ERR=1;
+		}
+	    }
+	}
+    }
+    
+    
+}
+
+sub save_couple {
+    my ($c, $i, $result)=@_;
+
+    # print qq($c, $i \n);
+
+    qx/mysql sucker -e "replace into img (dir, img, esito) values ($c,$i,$result);"/;
+}
+
+sub check_in_web {
+
+    my ($c, $i)=@_;
+
+    my $out=qx(curl  --user-agent "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)"  -s -I ${base_url}/$c/${i}_L.jpg|head -1);
+    # print qq(${base_url}/$c/$i_L.jpg);
+    $out =~ m#HTTP/1.1\s+(\d+)#;
+    print "$1 ";
+    return ($1==200);
+}
  
+sub check_in_db {
+    my ($c,$i) = @_;
+    
+    return 0;
+}
+
+
 sub check_couple {
     my ($c,$i) = @_;
 
     if (check_in_db($c,$i)) {
-	return $this::FOUND;
+	return 1;
     } else {
-	check_in_web($c, $i);
+	return check_in_web($c, $i);
+
     }
-}
 
- 
-sub inc_dir {
-    $last_dir = $dir;
-    $last_img = $img;
-    $dir++;
 }
-
-sub inc_img {
-    $last_dir = $dir;
-    $last_img = $img;
-    $img++;
-}
-
-sub dec_dir {
-    $last_dir = $dir;
-    $last_img = $img;
-    $dir--;
-}
-
-sub dec_img {
-    $last_dir = $dir;
-    $last_img = $img;
-    $img--;
-}
-
 
 
 sub curl {
@@ -103,18 +156,6 @@ sub check_c {
 }
 
 
-sub check_in_web {
-    ($dir, $img) = @_;
-    $url = qq($url/$dir/${img}_L.jpg);
-    return curl($url); # HEAD
-}
 
-if (getPage()) {
-    print qq(<img src="$url">);
-} else {
-    if ($lastCmd == "incdir") { inc_img; }  # mettere un limite qui
-    if ($lastCmd == "decdir") { } 
-    if ($lastCmd == "incimg") { inc_dir; } 
-    if ($lastCmd == "decimg") { } 
-}
+go_backwards($last_dir, $last_img, 0);
 
