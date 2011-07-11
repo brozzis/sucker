@@ -1,9 +1,11 @@
 #!/usr/bin/perl -w
 
-# use myconfig;
+# 
+use myconfig;
 #use CGI;
 
-#use strict;use warnings;
+#use strict;
+use warnings;
 #use WWW::Curl;
 #use WWW::Curl::Easy;
 
@@ -12,10 +14,11 @@ use DBI;
 
 $dsn = "DBI:mysql:database=sucker;host=localhost";
 
-$dbh = DBI->connect($dsn, "root", "", {'RaiseError' => 1} );
+$dbh = DBI->connect($dsn, "ste", "ste", {'RaiseError' => 1} );
 
 my $sth = $dbh->prepare("select found from img where dir=? and img=?");
 my $sth2 = $dbh->prepare("replace into img (dir, img, found) values (?,?,?)");
+my $sth_single = $dbh->prepare("select found from img where img=? and found");
 
 sub memo
 {
@@ -43,26 +46,26 @@ sub memo
 }
 
 
-# le più vecchie a giugno 2011
-$last_dir=3895;
-$last_img=249525; 
 
-# le mie foto di panos I
-$last_dir=3874;
-$last_img=247362; 
+# aggiungere una verifica sui not found in db... potrebbero essere errori di connessione
+
+# deve usare il db prima di controllare il web ?
+# 0falso
+# 1vero
+my $check_db=1;
 
 $dir_limit=20;
 
-$last_dir=shift || $last_dir;
-$last_img=shift || $last_img;
+$last_dir=shift || $myconfig::last_dir;
+$last_img=shift || $myconfig::last_img;
 
 
 
 # $dir=$last_dir;
 # $img=$last_img;
 
-$base_url=qq();
-    
+$base_url=$myconfig::base_url;
+
 sub iamlost_dir {
     my ($c, $i)=@_;
     my $x = 0;
@@ -72,7 +75,7 @@ sub iamlost_dir {
     if(check_directory($c)) {
 	print "directory $c is good\n";
 	while(! check_couple($c, $i) or $ERR) {
-	    save_couple($c, $i, 'FALSE');
+	    # save_couple($c, $i, 'FALSE');
 	    print "\r$c, $i ($x)        ";
 	    $i--;
 	    $x++;
@@ -85,7 +88,7 @@ sub iamlost_dir {
     }
     else 
     {
-	save_couple($c, $i, 'TRUE');
+	#save_couple($c, $i, 'TRUE');
 	return $i;
     }
     
@@ -104,7 +107,7 @@ sub iamlost {
     if(check_directory($c)) {
 	print "directory $c is good\n";
 	while((! check_couple($c, $i)) or $ERR) {
-	    save_couple($c, $i, 'FALSE');
+	    #save_couple($c, $i, 'FALSE');
 	    print "\r$c, $i ($x)        ";
 	    $c--;
 	    $x++;
@@ -117,7 +120,7 @@ sub iamlost {
     }
     else 
     {
-	save_couple($c, $i, 'TRUE');
+	#save_couple($c, $i, 'TRUE');
 	return $c;
     }
     
@@ -134,7 +137,7 @@ sub iamlost_forward {
     if(check_directory($c)) {
 	print "directory $c is good\n";
 	while((! check_couple($c, $i)) or $ERR) {
-	    save_couple($c, $i, 'FALSE');
+	    #save_couple($c, $i, 'FALSE');
 	    print "\r$c, $i ($x)        ";
 	    $c++;
 	    $x++;
@@ -147,8 +150,10 @@ sub iamlost_forward {
     }
     else 
     {
-	save_couple($c, $i, 'TRUE');
-	return $c;
+      #save_couple($c, $i, 'TRUE');
+      print "\nrecovered, calling myself again\n";
+      go_forwards( $c, $i );
+      return $c;
     }
     
 }
@@ -168,7 +173,7 @@ sub go_backwards {
 	print "\r$c, $i: $file_not_found        ";
 	if (check_couple($c, $i)) {
 	    print " OK ";
-	    save_couple($c, $i, 1);
+	    #save_couple($c, $i, 1);
 	    --$i; 
 	    $count{$c}++;
 	    $file_not_found=0;
@@ -178,7 +183,7 @@ sub go_backwards {
 	    $last_i_good=$i;
 	} else {
 	    print " NO ";
-	    save_couple($c, $i, 0);
+	    #save_couple($c, $i, 0);
 	    $file_not_found++;
 	    # go_backwards( --$c, $i, $file_not_found );
 	    $c--;
@@ -199,7 +204,7 @@ sub go_backwards {
 	}
 	
     }
-    iamlost( $last_c_good, $last_i_good );
+    iamlost( $last_c_good+1, $last_i_good+1 );
     
     
 }
@@ -211,12 +216,15 @@ sub go_forwards {
     my $ERR=0;
     my $dir_not_found;
     my $last_attempt=0;
+    # non proprio 'good', meglio 'known'
+    my $last_c_good=$c;
+    my $last_i_good=$i;
 
     while(! $ERR) {
 	print "\r$c, $i: $file_not_found        ";
 	if (check_couple($c, $i)) {
 	    print " OK ";
-	    save_couple($c, $i, 1);
+	    #save_couple($c, $i, 1);
 	    $i++; 
 	    $count{$c}++;
 	    $file_not_found=0;
@@ -226,28 +234,38 @@ sub go_forwards {
 	    $last_i_good=$i;
 	} else {
 	    print " NO ";
-	    save_couple($c, $i, 0);
+
 	    $file_not_found++;
-	    # go_backwards( --$c, $i, $file_not_found );
-	    $c++;
-	    if ($file_not_found>$dir_limit) {
-		$c-=$dir_limit; 
+
+	    if ($file_not_found<3) {
+
+	      $c++;
+
+	    } elsif  ($file_not_found>$dir_limit) {
+	    # probabile cambi solo $c
+	    # ma snon lo trova $c--; $++; # cerca nella stessa cartella, potrebbero essere cancellati
+	    # verifica cartella $c, se esiste -> $i++ nella stessa cartella
+		$c=$last_c_good;
 		$i++; 
 		$file_not_found = 0;
 		$dir_not_found++;
 		if ($dir_not_found>9) {
 		    $last_attempt++;
 		    $c-=4;
-		    $i+=32; # 64 è la media ottenuta da #img / #dir
-		    if ($last_attempt>2) {
+		    $i+=5; # 64 è la media ottenuta da #img / #dir
+		    if ($last_attempt>10) {
 			$ERR=1;
 		    }
 		}
+	    } else {
+	      $c = $last_c_good;
+	      $i = $last_i_good++;
 	    }
+	    
 	}
 	
     }
-    iamlost_forward( $last_c_good, $last_i_good );
+    iamlost_forward( $last_c_good+1, $last_i_good+1 );
     
     
 }
@@ -292,8 +310,28 @@ sub check_in_db {
     $sth->execute( $c, $i );
     my $ref = $sth->fetchrow_hashref() ;
 
+# TODO: verifica
+    if (!$ref->{'found'}) {
+      return check_single_img( $i );
+    }
+#
     return $ref->{'found'};
 }
+
+
+#
+# verifica
+#
+sub check_single_img {
+    my ($i) = @_;
+
+    $sth_single->execute( $i );
+    my $ref = $sth_single->fetchrow_hashref() ;
+
+    return $ref->{'found'};
+}
+
+
 
 
 sub check_couple {
@@ -301,14 +339,18 @@ sub check_couple {
 
     die "dir negativa!" if ($c<=0);
     die "img negativa!" if ($i<=0);
-    $val = check_in_db($c,$i);
+    
+    if ($check_db) {
+      $val = check_in_db($c,$i);
 
-    if (defined($val)) {
+      if (defined($val)) {
 	return $val;
+      }
     }
-	
-    return check_in_web($c, $i);
 
+    my $esito = check_in_web($c, $i); 
+    save_couple( $c, $i, $esito );
+    return $esito;
 }
 
 
